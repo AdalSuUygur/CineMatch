@@ -1,4 +1,4 @@
-movieId,title,imdbId,tmdbId,avg_rating,rating_count,original_language,original_title,popularity,release_date,runtime,vote_average,poster_url,llm_metadata
+movie_id,title,imdbId,tmdbId,avg_rating,rating_count,original_language,original_title,popularity,release_date,runtime,vote_average,poster_url,llm_metadata
 1,Toy Story (1995),114709,862.0,3.8974375697494095,68997.0,en,Toy Story,20.925,1995-11-22,81,7.97,https://image.tmdb.org/t/p/w500/uXDfjJbdP4ijW5hWSBrPrlKpxab.jpg,"Film: Toy Story (1995), Türler: Adventure, Animation, Children, Comedy, Fantasy. Puanı: 8.0, Popülerlik: 20.9. 1995 yılında çıktı."
 2,Jumanji (1995),113497,8844.0,3.2757576805978412,28904.0,en,Jumanji,2.8182,1995-12-15,104,7.243,https://image.tmdb.org/t/p/w500/vgpXmVaVyUL7GGiDeiK1mKEKzcX.jpg,"Film: Jumanji (1995), Türler: Adventure, Children, Fantasy. Puanı: 7.2, Popülerlik: 2.8. 1995 yılında çıktı."
 3,Grumpier Old Men (1995),113228,15602.0,3.1394472361809047,13134.0,en,Grumpier Old Men,1.5095,1995-12-22,101,6.483,https://image.tmdb.org/t/p/w500/1FSXpj5e8l4KH6nVFO5SPUeraOt.jpg,"Film: Grumpier Old Men (1995), Türler: Comedy, Romance. Puanı: 6.5, Popülerlik: 1.5. 1995 yılında çıktı."
