@@ -1,4 +1,3 @@
-# Sistemin okuyacağı ana veri
 movieId,title,genres,imdbId,tmdbId,avg_rating,rating_count,original_language,original_title,popularity,release_date,runtime,vote_average,poster_url
 1,Toy Story (1995),Adventure|Animation|Children|Comedy|Fantasy,114709,862.0,3.8974375697494095,68997.0,en,Toy Story,20.925,1995-11-22,81,7.97,https://image.tmdb.org/t/p/w500/uXDfjJbdP4ijW5hWSBrPrlKpxab.jpg
 2,Jumanji (1995),Adventure|Children|Fantasy,113497,8844.0,3.2757576805978412,28904.0,en,Jumanji,2.8182,1995-12-15,104,7.243,https://image.tmdb.org/t/p/w500/vgpXmVaVyUL7GGiDeiK1mKEKzcX.jpg
