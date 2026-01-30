@@ -197,6 +197,7 @@ export default function Home() {
 
   const [loading, setLoading] = useState(false);
   const [showGenreLimitModal, setShowGenreLimitModal] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
 
   useEffect(() => {
     const savedUser = localStorage.getItem('currentUser');
@@ -285,7 +286,7 @@ export default function Home() {
         setStep('home');
       }
     } catch (e: any) {
-      alert(e.message);
+      setAuthError(e.message);
     } finally {
       setLoading(false);
     }
@@ -588,6 +589,50 @@ export default function Home() {
                 Vazgeç, Misafir Olarak Devam Et ➔
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Auth Error Modal */}
+      {authError && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.85)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 2000,
+          backdropFilter: 'blur(10px)',
+        }}>
+          <div style={{
+            background: 'rgba(26, 34, 53, 0.95)',
+            padding: '3rem',
+            borderRadius: '2rem',
+            maxWidth: '450px',
+            width: '90%',
+            textAlign: 'center',
+            border: '2px solid #e50914',
+            boxShadow: '0 0 30px rgba(229, 9, 20, 0.3)',
+          }}>
+            <div style={{ fontSize: '4rem', marginBottom: '1.5rem' }}>⚠️</div>
+            <h2 style={{ fontSize: '1.8rem', fontWeight: 800, marginBottom: '1rem', color: '#ffffff' }}>Bir Hata Oluştu</h2>
+            <p style={{ color: '#b8c5d6', marginBottom: '2.5rem', lineHeight: 1.6, fontSize: '1.1rem' }}>
+              {authError}
+            </p>
+            <button
+              onClick={() => setAuthError(null)}
+              style={{
+                ...styles.startBtn,
+                marginTop: 0,
+                padding: '1rem 2rem'
+              }}
+            >
+              Anladım
+            </button>
           </div>
         </div>
       )}
