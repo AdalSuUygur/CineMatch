@@ -38,12 +38,12 @@ class MovieRecommender: # Recommender motorumuz.
             if os.path.exists(self.data_path): # Burdaki amaç: Kör uçuş yapmamak. Dosya orada yoksa programın çökmesini engeller.
 
                 self.df = pd.read_csv(self.data_path) # CSV dosyasındaki virgülle ayrılmış yazıları alır, satır ve sütunlardan oluşan bir tabloya (DataFrame) çevirir.
-                print(f"✅ Dosya yüklendi! Toplam Film: {len(self.df)}")
+                print(f" Dosya yüklendi! Toplam Film: {len(self.df)}")
                 print("Örnek veri (ilk satır):")
                 print(self.df.iloc[0]['llm_metadata']) # Buradaki amaç, verinin doğru formatta gelip gelmediğini gözle teyit etmek.
 
             else:
-                print("❌ Dosya bulunamadı!")
+                print(" Dosya bulunamadı!")
 
 # ---------------------------------
 # Beyin (Matris Oluşturma)
@@ -62,7 +62,7 @@ class MovieRecommender: # Recommender motorumuz.
         
         #* cosine_similarity(count_matrix): Her filmin sayı dizisini diğerleriyle karşılaştırır.
         self.similarity_matrix = cosine_similarity(count_matrix)
-        print("📊 Gelişmiş Benzerlik Matrisi oluşturuldu!")
+        print(" Gelişmiş Benzerlik Matrisi oluşturuldu!")
 
 # ---------------------------------
 # Cevap Verme (get_recommendations)
@@ -119,7 +119,7 @@ if __name__ == "__main__":
         
         # Test edelim: (inputla test, ama 2000e kadar idi veriler test aşamasında.)
         test_film = input("Film ismi: ")
-        print(f"\n🎬 '{test_film}' için Adal'ın Önerileri:")
+        print(f"\n '{test_film}' için Adal'ın Önerileri:")
         oneriler = adal_motoru.get_recommendations(test_film)
         
         for i, film in enumerate(oneriler, 1):

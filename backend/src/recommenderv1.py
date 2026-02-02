@@ -36,7 +36,7 @@ class MovieRecommender:
 
         # Puanları hesapla ve hafızaya (self) kaydet
         self.similarity_matrix = cosine_similarity(count_matrix)
-        print("📊 Benzerlik motoru Adal tarafından başarıyla kuruldu!")
+        print(" Benzerlik motoru Adal tarafından başarıyla kuruldu!")
 
     def get_recommendations(self, movie_title: str):
         try:
@@ -84,7 +84,7 @@ if __name__ == "__main__":
     adal_motoru.create_similarity_matrix()
     
     # Gerçekten oluştu mu? Boyutuna bakalım:
-    print(f"✅ Matris Hazır! Boyut: {adal_motoru.similarity_matrix.shape}") #Burada veriyi elde ettik aslında.
+    print(f"Matris Hazır! Boyut: {adal_motoru.similarity_matrix.shape}") #Burada veriyi elde ettik aslında.
 
     #Gelen veriyle konuşmamız lazım; bakalım motorumuz çalışıyor mu?
     test_film = "     toy story      " # Veritabanında olduğundan emin olduğun bir film yaz
