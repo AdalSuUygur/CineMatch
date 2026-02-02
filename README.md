@@ -21,7 +21,7 @@ Arka planda tek bir kriter yerine hibrit bir modelle çalışıyoruz. Öneriler 
 
 - **Sistem Mimarı ve Backend (Adal):** Öneri motoru tasarımı ve sistem mimarisi.
 - **Ürün Sahibi (Product Owner) ve AI (Batuhan):** Proje vizyonu ve LLM entegrasyonu.
-- **Veri Mühendisi (Dilara):** Kaggle veri temizleme ve veri setinin hazırlanması.
+- **Veri Mühendisi (Dilara):** TMDB API’den çekilen film ve değerlendirme verilerinin işlenmesi, birleştirilmesi ve proje veri setinin hazırlanması.
 - **Backend Geliştirici (Enes):** Kullanıcı profilleri ve veritabanı (DB) yönetimi.
 - **Frontend Geliştirici (Sude):** Next.js ile kullanıcı arayüzü (UI) geliştirme.
 
