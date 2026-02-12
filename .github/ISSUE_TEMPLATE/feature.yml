@@ -1,0 +1,43 @@
+Code → Add file → Create new file
+
+name: Feature
+description: Yeni özellik veya geliştirme görevi
+title: "[FEATURE] "
+labels: ["feature"]
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: Açıklama
+      placeholder: Bu feature ne yapacak?
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance Criteria
+      placeholder: |
+        - [ ] ...
+        - [ ] ...
+
+  - type: dropdown
+    id: team
+    attributes:
+      label: Team
+      options:
+        - Backend
+        - Frontend
+        - Data
+        - AI
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priority
+      options:
+        - Critical
+        - High
+        - Medium
+        - Low
+        - Trivial
