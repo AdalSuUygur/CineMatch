@@ -1,0 +1,30 @@
+name: Bug
+description: Hata bildirimi
+title: "[BUG] "
+labels: ["bug"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      placeholder: Ne çalışmıyor?
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Reproduce Steps
+      placeholder: |
+        1.
+        2.
+        3.
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priority
+      options:
+        - Critical
+        - High
+        - Medium
+        - Low
+        - Trivial
