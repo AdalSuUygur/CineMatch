@@ -6,8 +6,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 
-# MongoDB bağlantı fonksiyonları
-from mongodb import connect_to_mongo, close_mongo_connection
+# PostgreSQL bağlantı fonksiyonları
+from src.db_pg import init_db, close_db
 
 # Route'ları import et
 from routes import users, movies, interactions, genres, chat, recommendations
@@ -17,14 +17,17 @@ from routes import users, movies, interactions, genres, chat, recommendations
 async def lifespan(app: FastAPI):
     """Uygulama başlangıç ve kapanış olayları"""
     # Başlangıç
-    await connect_to_mongo()
+    await init_db()
+    
     # Öneri motorunu hazırla
     from src.recommender import engine
     import asyncio
     asyncio.create_task(engine.refresh_data())
+    
     yield
+    
     # Kapanış
-    await close_mongo_connection()
+    await close_db()
 
 
 # FastAPI uygulaması oluştur

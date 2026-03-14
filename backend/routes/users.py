@@ -1,43 +1,39 @@
 """
 Kullanıcı API endpoint'leri
 """
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.future import select
 from typing import List, Dict, Any
-from mongodb import get_users_collection, get_user_interactions_collection
+
+from backend.src.db_pg import get_db
+from backend.src.models_pg import User, Interaction
 
 router = APIRouter(prefix="/api/users", tags=["users"])
 
 
 @router.get("")
-async def get_all_users() -> List[Dict[str, Any]]:
+async def get_all_users(db: AsyncSession = Depends(get_db)) -> List[Dict[str, Any]]:
     """Tüm kullanıcıları getir"""
     try:
-        users_collection = get_users_collection()
-        users = await users_collection.find().to_list(length=None)
-        
-        # MongoDB'nin _id alanını string'e çevir
-        for user in users:
-            if '_id' in user:
-                user['_id'] = str(user['_id'])
-        
-        return users
+        result = await db.execute(select(User))
+        users = result.scalars().all()
+        return [{"_id": str(u.id), **u.__dict__} for u in users]
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Kullanıcılar getirilirken hata: {str(e)}")
 
 
 @router.get("/{user_id}")
-async def get_user_by_id(user_id: int) -> Dict[str, Any]:
+async def get_user_by_id(user_id: int, db: AsyncSession = Depends(get_db)) -> Dict[str, Any]:
     """Belirli bir kullanıcıyı getir"""
     try:
-        users_collection = get_users_collection()
-        user = await users_collection.find_one({"user_id": user_id})
+        result = await db.execute(select(User).where(User.user_id == user_id))
+        user = result.scalars().first()
         
         if not user:
             raise HTTPException(status_code=404, detail=f"Kullanıcı bulunamadı: {user_id}")
         
-        if '_id' in user:
-            user['_id'] = str(user['_id'])
-        return user
+        return {"_id": str(user.id), **user.__dict__}
     except HTTPException:
         raise
     except Exception as e:
@@ -45,10 +41,9 @@ async def get_user_by_id(user_id: int) -> Dict[str, Any]:
 
 
 @router.post("/auth/register")
-async def register_user(user_data: Dict[str, Any]):
+async def register_user(user_data: Dict[str, Any], db: AsyncSession = Depends(get_db)):
     """Yeni kullanıcı oluştur (Benzersiz email ve şifre ile)"""
     try:
-        users_collection = get_users_collection()
         email = user_data.get("email")
         password = user_data.get("password")
         
@@ -56,63 +51,66 @@ async def register_user(user_data: Dict[str, Any]):
             raise HTTPException(status_code=400, detail="Email ve şifre zorunludur.")
         
         # Email kontrolü
-        existing_user = await users_collection.find_one({"email": email})
+        result = await db.execute(select(User).where(User.email == email))
+        existing_user = result.scalars().first()
         if existing_user:
             raise HTTPException(status_code=400, detail="Bu email adresi zaten kullanımda.")
             
         # Yeni user_id oluştur
-        last_user = await users_collection.find_one(sort=[("user_id", -1)])
-        new_id = (last_user["user_id"] + 1) if last_user else 1
+        result = await db.execute(select(User).order_by(User.user_id.desc()).limit(1))
+        last_user = result.scalars().first()
+        new_id = (last_user.user_id + 1) if last_user and last_user.user_id else 1
         
-        new_user = {
-            "user_id": new_id,
-            "full_name": user_data.get("full_name"),
-            "email": email,
-            "password": password, # Gerçek projede hash'lenmeli
-            "selected_genres": user_data.get("selected_genres", [])
-        }
+        new_user = User(
+            user_id=new_id,
+            full_name=user_data.get("full_name"),
+            email=email,
+            password=password, # Gerçek projede hash'lenmeli
+            selected_genres=user_data.get("selected_genres", [])
+        )
         
-        await users_collection.insert_one(new_user)
+        db.add(new_user)
+        await db.commit()
+        await db.refresh(new_user)
         
-        # Interaction tablosuna başlangıç kaydı
-        interactions_collection = get_user_interactions_collection()
-        await interactions_collection.insert_one({
-            "interaction_id": new_id * 1000,
-            "user_id": new_id,
-            "movie_id": 0,
-            "is_liked": False,
-            "rating": 0,
-            "selected_genres": user_data.get("selected_genres", [])
-        })
+        # Interaction tablosuna başlangıç kaydı - Sadece postgres id değil interaction_id ile
+        new_int = Interaction(
+            interaction_id=new_id * 1000,
+            user_id=new_id,
+            movie_id=0,
+            is_liked=False,
+            rating=0.0
+        )
+        db.add(new_int)
+        await db.commit()
         
         # Şifreyi dönme
-        new_user.pop("password", None)
-        return {"status": "success", "user_id": new_id, "user": new_user}
+        user_dict = new_user.__dict__.copy()
+        user_dict.pop("password", None)
+        return {"status": "success", "user_id": new_id, "user": {"_id": str(new_user.id), **user_dict}}
     except HTTPException:
         raise
     except Exception as e:
+        await db.rollback()
         raise HTTPException(status_code=500, detail=f"Kayıt sırasında hata: {str(e)}")
 
 
 @router.post("/auth/login")
-async def login_user(login_data: Dict[str, Any]):
+async def login_user(login_data: Dict[str, Any], db: AsyncSession = Depends(get_db)):
     """Email ve şifre ile giriş yap"""
     try:
-        users_collection = get_users_collection()
         email = login_data.get("email")
         password = login_data.get("password")
         
-        user = await users_collection.find_one({"email": email})
+        result = await db.execute(select(User).where(User.email == email))
+        user = result.scalars().first()
         
-        if not user or user.get("password") != password:
+        if not user or user.password != password:
             raise HTTPException(status_code=401, detail="Email veya şifre hatalı.")
             
-        if '_id' in user:
-            user['_id'] = str(user['_id'])
-            
-        # Şifreyi temizle
-        user.pop("password", None)
-        return {"status": "success", "user": user}
+        user_dict = user.__dict__.copy()
+        user_dict.pop("password", None)
+        return {"status": "success", "user": {"_id": str(user.id), **user_dict}}
     except HTTPException:
         raise
     except Exception as e:
@@ -120,25 +118,20 @@ async def login_user(login_data: Dict[str, Any]):
 
 
 @router.post("/{user_id}/preferences")
-async def save_user_preferences(user_id: int, preferences: Dict[str, Any]):
+async def save_user_preferences(user_id: int, preferences: Dict[str, Any], db: AsyncSession = Depends(get_db)):
     """Kullanıcının seçtiği türleri kaydet"""
     try:
-        users_collection = get_users_collection()
-        interactions_collection = get_user_interactions_collection()
         selected_genres = preferences.get("selected_genres", [])
         
-        # Users koleksiyonunu güncelle
-        await users_collection.update_one(
-            {"user_id": user_id},
-            {"$set": {"selected_genres": selected_genres}}
-        )
-        
-        # User_interactions koleksiyonunu güncelle
-        await interactions_collection.update_many(
-            {"user_id": user_id},
-            {"$set": {"selected_genres": selected_genres}}
-        )
+        # Users tablosunu güncelle
+        result = await db.execute(select(User).where(User.user_id == user_id))
+        user = result.scalars().first()
+        if user:
+            user.selected_genres = selected_genres
+            
+        await db.commit()
             
         return {"status": "success", "message": "Tercihler kaydedildi"}
     except Exception as e:
+        await db.rollback()
         raise HTTPException(status_code=500, detail=f"Tercihler kaydedilirken hata: {str(e)}")

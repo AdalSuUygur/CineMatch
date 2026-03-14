@@ -3,7 +3,10 @@ import numpy as np
 from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 from sklearn.preprocessing import MinMaxScaler
-from mongodb import get_movies_collection, get_users_collection, get_user_interactions_collection, get_genres_collection
+from sqlalchemy.future import select
+
+from backend.src.db_pg import engine as db_engine, async_session_maker
+from backend.src.models_pg import Movie, User, Interaction, Genre
 
 class CineMatchEngine:
     def __init__(self):
@@ -14,9 +17,12 @@ class CineMatchEngine:
 
     async def refresh_data(self):
         """Database'deki tüm filmleri çekip matematiksel modele hazırlar."""
-        movies_col = get_movies_collection()
-        cursor = movies_col.find({})
-        movies_list = await cursor.to_list(length=None)
+        async with async_session_maker() as session:
+            result = await session.execute(select(Movie))
+            movies_list = [{"movieId": m.movieId, "id": m.id, "title": m.title, "original_language": m.original_language,
+                            "vote_average": m.vote_average, "release_date": m.release_date, "popularity": m.popularity,
+                            "poster_url": m.poster_url, "llm_metadata": m.llm_metadata} for m in result.scalars().all()]
+            
         self.movies_df = pd.DataFrame(movies_list)
         
         if self.movies_df.empty:
@@ -24,7 +30,7 @@ class CineMatchEngine:
             self.is_ready = False
             return
 
-        # MongoDB'nin karmaşık tarihini frontendin anlayacağı temiz bir yıla çeviriyoruz.
+        # Tarih formatı
         if 'release_date' in self.movies_df.columns:
             self.movies_df['release_date'] = pd.to_datetime(self.movies_df['release_date'], errors='coerce')
             self.movies_df['year'] = self.movies_df['release_date'].dt.year.fillna(0).astype(int)
@@ -38,9 +44,12 @@ class CineMatchEngine:
         """Metin benzerliği ve popülerlik normalizasyonu."""
         # LLM Metadata üzerinden metin benzerliği
         self.count = CountVectorizer(stop_words='english')
-        # llm_metadata boşsa boş string ile doldur
-        metadata = self.movies_df['llm_metadata'].fillna('')
-        self.count_matrix = self.count.fit_transform(metadata)
+        
+        # Eğer llm_metadata dict ise string'e çevir, string ise doğrudan kullan
+        metadata_series = self.movies_df['llm_metadata'].apply(
+            lambda x: str(x) if isinstance(x, dict) else (x if pd.notnull(x) else '')
+        )
+        self.count_matrix = self.count.fit_transform(metadata_series)
         self.cosine_sim = cosine_similarity(self.count_matrix)
         
         # Popülerlik verisini 0-1 arasına sıkıştır
@@ -52,9 +61,13 @@ class CineMatchEngine:
 
     async def get_genre_names(self, genre_ids):
         """Sayısal Tür ID'lerini 'Action' gibi isimlere çevirir."""
-        genres_col = get_genres_collection()
-        genres = await genres_col.find({"genre_id": {"$in": genre_ids}}).to_list(length=None)
-        return [g['genre_name'] for g in genres]
+        if not genre_ids:
+            return []
+            
+        async with async_session_maker() as session:
+            result = await session.execute(select(Genre).where(Genre.genre_id.in_(genre_ids)))
+            genres = result.scalars().all()
+            return [g.genre_name for g in genres]
 
     async def recommend_for_guest(self, selected_genre_ids):
         """GUEST: Sadece seçtiği 1-3 tür üzerinden popüler olanları getirir."""
@@ -62,19 +75,22 @@ class CineMatchEngine:
             await self.refresh_data()
             
         genre_names = await self.get_genre_names(selected_genre_ids)
+        if not genre_names:
+            top_indices = self.movies_df.sort_values(by='norm_popularity', ascending=False).index[:10]
+            return self.format_output(top_indices)
+            
         query = "|".join(genre_names)
         
-        # Seçilen türlere uyan filmleri bul
-        mask = self.movies_df['llm_metadata'].str.contains(query, case=False, na=False)
+        metadata_series = self.movies_df['llm_metadata'].apply(
+            lambda x: str(x) if isinstance(x, dict) else (x if pd.notnull(x) else '')
+        )
+        mask = metadata_series.str.contains(query, case=False, na=False)
         subset = self.movies_df[mask].copy()
         
         if subset.empty:
-            # Türlere uyan film yoksa en popülerleri döndür
             top_indices = self.movies_df.sort_values(by='norm_popularity', ascending=False).index[:10]
             return self.format_output(top_indices)
         
-        # Hibrit Skor: Tür uyumu + (Popülerlik * 0.2)
-        # vote_average 0-10 arası, popülerlik 0-1 arası normalize edildi.
         subset['guest_score'] = subset['vote_average'].fillna(0) * 0.1 + subset['norm_popularity'] * 0.2
         
         top_indices = subset.sort_values(by='guest_score', ascending=False).index[:10]
@@ -85,31 +101,30 @@ class CineMatchEngine:
         if not self.is_ready:
             await self.refresh_data()
 
-        users_col = get_users_collection()
-        user = await users_col.find_one({"user_id": user_id})
-        if not user: return {"error": "Kullanıcı bulunamadı"}
+        async with async_session_maker() as session:
+            result_user = await session.execute(select(User).where(User.user_id == user_id))
+            user = result_user.scalars().first()
+            if not user: return {"error": "Kullanıcı bulunamadı"}
 
-        fav_genres_ids = user.get('selected_genres', [])
-        interactions_col = get_user_interactions_collection()
-        interactions = await interactions_col.find({"user_id": user_id, "is_liked": True}).to_list(length=None)
+            fav_genres_ids = user.selected_genres or []
+            
+            result_interact = await session.execute(
+                select(Interaction).where((Interaction.user_id == user_id) & (Interaction.is_liked == True))
+            )
+            interactions = result_interact.scalars().all()
 
         if not fav_genres_ids and not interactions:
-            # En popüler 10 filmi getir
             top_indices = self.movies_df.sort_values(by='norm_popularity', ascending=False).index[:10]
             return self.format_output(top_indices)
 
-        # 1. Kayıt olurken seçtiği türler
         fav_genres = await self.get_genre_names(fav_genres_ids)
         
-        # Benzerlik puanlarını toplayacağımız havuz
         final_scores = np.zeros(len(self.movies_df))
         
-        # Beğendiği her film için tüm kütüphane ile benzerlik puanı ekle
         for interact in interactions:
-            m_id = interact['movie_id']
-            rating_weight = interact.get('rating', 3) / 5.0
+            m_id = interact.movie_id
+            rating_weight = (interact.rating or 3.0) / 5.0
             try:
-                # movieId veya id kontrolü
                 idx_list = self.movies_df[self.movies_df['movieId'] == m_id].index
                 if idx_list.empty:
                     idx_list = self.movies_df[self.movies_df['id'] == m_id].index
@@ -121,16 +136,16 @@ class CineMatchEngine:
                 print(f"Benzerlik hesaplama hatası (movie_id: {m_id}): {e}")
                 continue
 
-        # Tür Bonusu
         genre_mask = np.zeros(len(self.movies_df))
         if fav_genres:
             genre_query = "|".join(fav_genres)
-            genre_mask = self.movies_df['llm_metadata'].str.contains(genre_query, case=False, na=False).astype(int).values
+            metadata_str = self.movies_df['llm_metadata'].apply(
+                lambda x: str(x) if isinstance(x, dict) else (x if pd.notnull(x) else '')
+            )
+            genre_mask = metadata_str.str.contains(genre_query, case=False, na=False).astype(int).values
         
-        # FINAL MATEMATİKSEL FORMÜL: Benzerlik (%50) + Tür Uyumu (%30) + Popülerlik (%20)
         total_scores = (final_scores * 0.5) + (genre_mask * 0.3) + (self.movies_df['norm_popularity'] * 0.2)
         
-        # En iyi 10 filmi seç
         top_indices = np.argsort(total_scores)[::-1][:10]
         return self.format_output(top_indices)
 

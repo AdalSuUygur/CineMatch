@@ -1,9 +1,14 @@
 """
 Film API endpoint'leri
 """
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Depends
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.future import select
+from sqlalchemy import or_, and_, desc
 from typing import List, Optional, Dict, Any
-from mongodb import get_movies_collection
+
+from backend.src.db_pg import get_db
+from backend.src.models_pg import Movie, MovieGenre
 
 router = APIRouter(prefix="/api/movies", tags=["movies"])
 
@@ -14,70 +19,60 @@ async def get_all_movies(
     limit: int = Query(20, ge=1, le=100, description="Getirilecek kayıt sayısı"),
     search: Optional[str] = Query(None, description="Film adında arama"),
     genre_ids: Optional[str] = Query(None, description="Virgülle ayrılmış tür ID'leri"),
-    sort_by: Optional[str] = Query(None, description="Sıralama kriteri (popularity gibi)")
+    sort_by: Optional[str] = Query(None, description="Sıralama kriteri (popularity gibi)"),
+    db: AsyncSession = Depends(get_db)
 ) -> List[Dict[str, Any]]:
-
     """Tüm filmleri getir (pagination ve tür filtresi ile)"""
     try:
-        movies_collection = get_movies_collection()
+        stmt = select(Movie)
         
         # Temel arama filtresi
-        query = {}
         if search:
-            query["title"] = {"$regex": search, "$options": "i"}
+            stmt = stmt.where(Movie.title.ilike(f"%{search}%"))
             
         # Tür filtresi ekle
         if genre_ids:
             genre_id_list = [int(gid.strip()) for gid in genre_ids.split(",") if gid.strip().isdigit()]
             if genre_id_list:
-                # movie_genres koleksiyonundan bu türlere sahip film ID'lerini al
-                from mongodb import get_movie_genres_collection
-                mg_collection = get_movie_genres_collection()
+                # Build subquery or join for movie_genres
+                movie_genre_stmt = select(MovieGenre.movie_id).where(MovieGenre.genre_id.in_(genre_id_list))
+                movie_genres_result = await db.execute(movie_genre_stmt)
+                movie_ids = list(set([row[0] for row in movie_genres_result.all()]))
                 
-                # Belirtilen türlerden HERHANGİ BİRİNE sahip filmleri bul
-                relations = await mg_collection.find({"genre_id": {"$in": genre_id_list}}).to_list(length=None)
-                movie_ids = list(set([rel["movie_id"] for rel in relations]))
-                
-                # Film sorgusuna bu ID'leri ekle
                 if movie_ids:
-                    query["$and"] = query.get("$and", []) + [{"movieId": {"$in": movie_ids}}]
+                    stmt = stmt.where(Movie.movieId.in_(movie_ids))
                 else:
-                    # Tür seçilmiş ama film bulunamamışsa boş liste dön
                     return []
-        
-        # Filmleri getir
-        cursor = movies_collection.find(query).skip(skip).limit(limit)
-        
+
+        # Sıralama
         if sort_by == "popularity":
-            cursor = cursor.sort("popularity", -1)
+            stmt = stmt.order_by(desc(Movie.popularity))
             
-        movies = await cursor.to_list(length=limit)
+        # Pagination
+        stmt = stmt.offset(skip).limit(limit)
         
-        # MongoDB'nin _id alanını string'e çevir
-        for movie in movies:
-            if '_id' in movie:
-                movie['_id'] = str(movie['_id'])
+        # Execute query
+        result = await db.execute(stmt)
+        movies = result.scalars().all()
         
-        return movies
+        # Pydantic dict format
+        return [{"_id": str(m.id), **m.__dict__} for m in movies]
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Filmler getirilirken hata: {str(e)}")
 
 
-
 @router.get("/{movie_id}")
-async def get_movie_by_id(movie_id: int) -> Dict[str, Any]:
+async def get_movie_by_id(movie_id: int, db: AsyncSession = Depends(get_db)) -> Dict[str, Any]:
     """Belirli bir filmi getir"""
     try:
-        movies_collection = get_movies_collection()
-        # Hem movieId hem de id olarak aramayı dene
-        movie = await movies_collection.find_one({"$or": [{"movieId": movie_id}, {"id": movie_id}]})
+        stmt = select(Movie).where(or_(Movie.movieId == movie_id, Movie.id == movie_id))
+        result = await db.execute(stmt)
+        movie = result.scalars().first()
         
         if not movie:
             raise HTTPException(status_code=404, detail=f"Film bulunamadı: {movie_id}")
         
-        if '_id' in movie:
-            movie['_id'] = str(movie['_id'])
-        return movie
+        return {"_id": str(movie.id), **movie.__dict__}
     except HTTPException:
         raise
     except Exception as e:
@@ -85,25 +80,22 @@ async def get_movie_by_id(movie_id: int) -> Dict[str, Any]:
 
 
 @router.get("/search/query")
-async def search_movies(q: str = Query(..., min_length=1, description="Arama terimi")) -> List[Dict[str, Any]]:
+async def search_movies(
+    q: str = Query(..., min_length=1, description="Arama terimi"),
+    db: AsyncSession = Depends(get_db)
+) -> List[Dict[str, Any]]:
     """Film ara"""
     try:
-        movies_collection = get_movies_collection()
+        stmt = select(Movie).where(
+            or_(
+                Movie.title.ilike(f"%{q}%"),
+                Movie.original_title.ilike(f"%{q}%")
+            )
+        ).limit(50)
         
-        # Başlık veya orijinal başlıkta ara
-        query = {
-            "$or": [
-                {"title": {"$regex": q, "$options": "i"}},
-                {"original_title": {"$regex": q, "$options": "i"}}
-            ]
-        }
+        result = await db.execute(stmt)
+        movies = result.scalars().all()
         
-        movies = await movies_collection.find(query).limit(50).to_list(length=50)
-        
-        for movie in movies:
-            if '_id' in movie:
-                movie['_id'] = str(movie['_id'])
-        
-        return movies
+        return [{"_id": str(m.id), **m.__dict__} for m in movies]
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Arama yapılırken hata: {str(e)}")
