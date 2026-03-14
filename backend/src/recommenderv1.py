@@ -36,7 +36,7 @@ class MovieRecommender:
 
         # Puanları hesapla ve hafızaya (self) kaydet
         self.similarity_matrix = cosine_similarity(count_matrix)
-        print("📊 Benzerlik motoru Adal tarafından başarıyla kuruldu!")
+        print(" Benzerlik motoru Adal tarafından başarıyla kuruldu!")
 
     def get_recommendations(self, movie_title: str):
         try:
