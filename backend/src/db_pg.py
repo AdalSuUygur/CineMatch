@@ -15,8 +15,15 @@ if DATABASE_URL and DATABASE_URL.startswith("postgresql://"):
     DATABASE_URL = DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://", 1)
 
 # fix for asyncpg url params
-if "?" in DATABASE_URL:
-    DATABASE_URL = DATABASE_URL.split("?")[0] + "?ssl=require"
+if DATABASE_URL:
+    if "sslmode=" in DATABASE_URL:
+        # replace sslmode=xxx with ssl=require for asyncpg
+        import re
+        DATABASE_URL = re.sub(r"sslmode=[^&?]+", "ssl=require", DATABASE_URL)
+    elif "?" not in DATABASE_URL:
+        DATABASE_URL += "?ssl=require"
+    elif "ssl=" not in DATABASE_URL:
+        DATABASE_URL += "&ssl=require"
 
 engine = create_async_engine(DATABASE_URL, echo=False)
 

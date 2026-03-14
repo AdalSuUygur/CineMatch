@@ -18,7 +18,12 @@ async def get_all_genres(db: AsyncSession = Depends(get_db)) -> List[Dict[str, A
     try:
         result = await db.execute(select(Genre))
         genres = result.scalars().all()
-        return [{"_id": str(g.genre_id), **g.__dict__} for g in genres]
+        results = []
+        for g in genres:
+            g_dict = {k: v for k, v in g.__dict__.items() if not k.startswith('_')}
+            g_dict["_id"] = str(g.genre_id)
+            results.append(g_dict)
+        return results
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Türler getirilirken hata: {str(e)}")
 
@@ -43,6 +48,11 @@ async def get_movie_genres(movie_id: int, db: AsyncSession = Depends(get_db)) ->
         result_g = await db.execute(stmt_g)
         genres = result_g.scalars().all()
         
-        return [{"_id": str(g.genre_id), **g.__dict__} for g in genres]
+        results = []
+        for g in genres:
+            g_dict = {k: v for k, v in g.__dict__.items() if not k.startswith('_')}
+            g_dict["_id"] = str(g.genre_id)
+            results.append(g_dict)
+        return results
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Film türleri getirilirken hata: {str(e)}")

@@ -19,7 +19,12 @@ async def get_all_interactions(db: AsyncSession = Depends(get_db)) -> List[Dict[
     try:
         result = await db.execute(select(Interaction))
         interactions = result.scalars().all()
-        return [{"_id": str(i.id), **i.__dict__} for i in interactions]
+        results = []
+        for i in interactions:
+            i_dict = {k: v for k, v in i.__dict__.items() if not k.startswith('_')}
+            i_dict["_id"] = str(i.id)
+            results.append(i_dict)
+        return results
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Etkileşimler getirilirken hata: {str(e)}")
 
@@ -30,7 +35,12 @@ async def get_user_interactions(user_id: int, db: AsyncSession = Depends(get_db)
     try:
         result = await db.execute(select(Interaction).where(Interaction.user_id == user_id))
         interactions = result.scalars().all()
-        return [{"_id": str(i.id), **i.__dict__} for i in interactions]
+        results = []
+        for i in interactions:
+            i_dict = {k: v for k, v in i.__dict__.items() if not k.startswith('_')}
+            i_dict["_id"] = str(i.id)
+            results.append(i_dict)
+        return results
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Kullanıcı etkileşimleri getirilirken hata: {str(e)}")
 
