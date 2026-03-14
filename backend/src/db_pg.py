@@ -4,26 +4,25 @@ from sqlalchemy.orm import declarative_base
 from dotenv import load_dotenv
 from pathlib import Path
 
-# .env dosyasını yükle (Root dizininden)
-env_path = Path(__file__).parent.parent.parent / '.env'
-load_dotenv(dotenv_path=env_path)
+# .env dosyasını yükle (Yerel geliştirme için)
+try:
+    env_path = Path(__file__).parent.parent.parent / '.env'
+    if env_path.exists():
+        load_dotenv(dotenv_path=env_path)
+except Exception:
+    pass
 
 DATABASE_URL = os.getenv("DATABASE_URL")
+
+if not DATABASE_URL:
+    # Vercel'de DATABASE_URL bulunamazsa uygulama hata vermeden önce uyarı versin
+    print("ERROR: DATABASE_URL environment variable is MISSING!")
+    # Fallback to empty string to avoid crash during import, but will fail on connection
+    DATABASE_URL = ""
 
 # asyncpg uyumluluğu için postgresql://'i postgresql+asyncpg://'e çeviriyoruz
 if DATABASE_URL and DATABASE_URL.startswith("postgresql://"):
     DATABASE_URL = DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://", 1)
-
-# fix for asyncpg url params
-if DATABASE_URL:
-    if "sslmode=" in DATABASE_URL:
-        # replace sslmode=xxx with ssl=require for asyncpg
-        import re
-        DATABASE_URL = re.sub(r"sslmode=[^&?]+", "ssl=require", DATABASE_URL)
-    elif "?" not in DATABASE_URL:
-        DATABASE_URL += "?ssl=require"
-    elif "ssl=" not in DATABASE_URL:
-        DATABASE_URL += "&ssl=require"
 
 engine = create_async_engine(DATABASE_URL, echo=False)
 

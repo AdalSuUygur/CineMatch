@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, Boolean, ForeignKey, ARRAY
+from sqlalchemy import Column, Integer, String, Float, Boolean, ForeignKey, ARRAY, JSON
 from sqlalchemy.orm import relationship
 from backend.src.db_pg import Base
 
@@ -32,7 +32,7 @@ class Movie(Base):
     overview = Column(String, nullable=True)
     
     # Optional / Extra fields for LLM mappings
-    llm_metadata = Column(String, nullable=True)
+    llm_metadata = Column(JSON, nullable=True)
     
     interactions = relationship("Interaction", back_populates="movie")
 

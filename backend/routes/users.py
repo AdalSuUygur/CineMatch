@@ -18,13 +18,7 @@ async def get_all_users(db: AsyncSession = Depends(get_db)) -> List[Dict[str, An
     try:
         result = await db.execute(select(User))
         users = result.scalars().all()
-        results = []
-        for u in users:
-            u_dict = {k: v for k, v in u.__dict__.items() if not k.startswith('_')}
-            u_dict["_id"] = str(u.id)
-            u_dict.pop("password", None)
-            results.append(u_dict)
-        return results
+        return [{"_id": str(u.id), **u.__dict__} for u in users]
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Kullanıcılar getirilirken hata: {str(e)}")
 
@@ -39,10 +33,7 @@ async def get_user_by_id(user_id: int, db: AsyncSession = Depends(get_db)) -> Di
         if not user:
             raise HTTPException(status_code=404, detail=f"Kullanıcı bulunamadı: {user_id}")
         
-        user_dict = {k: v for k, v in user.__dict__.items() if not k.startswith('_')}
-        user_dict["_id"] = str(user.id)
-        user_dict.pop("password", None)
-        return user_dict
+        return {"_id": str(user.id), **user.__dict__}
     except HTTPException:
         raise
     except Exception as e:
@@ -94,10 +85,9 @@ async def register_user(user_data: Dict[str, Any], db: AsyncSession = Depends(ge
         await db.commit()
         
         # Şifreyi dönme
-        user_dict = {k: v for k, v in new_user.__dict__.items() if not k.startswith('_')}
-        user_dict["_id"] = str(new_user.id)
+        user_dict = new_user.__dict__.copy()
         user_dict.pop("password", None)
-        return {"status": "success", "user_id": new_id, "user": user_dict}
+        return {"status": "success", "user_id": new_id, "user": {"_id": str(new_user.id), **user_dict}}
     except HTTPException:
         raise
     except Exception as e:
@@ -118,10 +108,9 @@ async def login_user(login_data: Dict[str, Any], db: AsyncSession = Depends(get_
         if not user or user.password != password:
             raise HTTPException(status_code=401, detail="Email veya şifre hatalı.")
             
-        user_dict = {k: v for k, v in user.__dict__.items() if not k.startswith('_')}
-        user_dict["_id"] = str(user.id)
+        user_dict = user.__dict__.copy()
         user_dict.pop("password", None)
-        return {"status": "success", "user": user_dict}
+        return {"status": "success", "user": {"_id": str(user.id), **user_dict}}
     except HTTPException:
         raise
     except Exception as e:
