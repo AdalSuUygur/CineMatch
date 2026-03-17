@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import List, Optional
-from src.recommender import engine
+from backend.src.recommender import engine
 
 router = APIRouter(prefix="/api/recommend", tags=["recommendations"])
 

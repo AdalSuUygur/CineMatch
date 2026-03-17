@@ -1,8 +1,4 @@
-import pandas as pd
-import numpy as np
-from sklearn.feature_extraction.text import CountVectorizer
-from sklearn.metrics.pairwise import cosine_similarity
-from sklearn.preprocessing import MinMaxScaler
+# Heavy imports moved inside methods to prevent OOM on serverless startup
 from sqlalchemy.future import select
 
 from backend.src.db_pg import engine as db_engine, async_session_maker
@@ -10,13 +6,25 @@ from backend.src.models_pg import Movie, User, Interaction, Genre
 
 class CineMatchEngine:
     def __init__(self):
-        self.movies_df = pd.DataFrame()
+        self._movies_df = None  # Lazy loading via property
         self.cosine_sim = None
         self.count_matrix = None
         self.is_ready = False
 
+    @property
+    def movies_df(self):
+        import pandas as pd
+        if self._movies_df is None:
+            self._movies_df = pd.DataFrame()
+        return self._movies_df
+
+    @movies_df.setter
+    def movies_df(self, value):
+        self._movies_df = value
+
     async def refresh_data(self):
         """Database'deki tüm filmleri çekip matematiksel modele hazırlar."""
+        import pandas as pd
         async with async_session_maker() as session:
             result = await session.execute(select(Movie))
             movies_list = [{"movieId": m.movieId, "id": m.id, "title": m.title, "original_language": m.original_language,
@@ -30,6 +38,7 @@ class CineMatchEngine:
             self.is_ready = False
             return
 
+        import pandas as pd
         # Tarih formatı
         if 'release_date' in self.movies_df.columns:
             self.movies_df['release_date'] = pd.to_datetime(self.movies_df['release_date'], errors='coerce')
@@ -40,9 +49,13 @@ class CineMatchEngine:
         self.is_ready = True
         print(f" Motor Hazır: {len(self.movies_df)} film başarıyla yüklendi.")
 
-    def prepare_engine(self):
-        """Metin benzerliği ve popülerlik normalizasyonu."""
-        # LLM Metadata üzerinden metin benzerliği
+        import pandas as pd
+        import numpy as np
+        from sklearn.feature_extraction.text import CountVectorizer
+        from sklearn.metrics.pairwise import cosine_similarity
+        from sklearn.preprocessing import MinMaxScaler
+
+        # Metin benzerliği ve popülerlik normalizasyonu.
         self.count = CountVectorizer(stop_words='english')
         
         # Eğer llm_metadata dict ise string'e çevir, string ise doğrudan kullan
@@ -81,6 +94,7 @@ class CineMatchEngine:
             
         query = "|".join(genre_names)
         
+        import pandas as pd
         metadata_series = self.movies_df['llm_metadata'].apply(
             lambda x: str(x) if isinstance(x, dict) else (x if pd.notnull(x) else '')
         )
@@ -119,6 +133,9 @@ class CineMatchEngine:
 
         fav_genres = await self.get_genre_names(fav_genres_ids)
         
+        import numpy as np
+        import pandas as pd
+        
         final_scores = np.zeros(len(self.movies_df))
         
         for interact in interactions:
@@ -151,6 +168,7 @@ class CineMatchEngine:
 
     def format_output(self, indices):
         """Frontend'e temiz veri döner."""
+        import pandas as pd
         results = []
         for idx in indices:
             row = self.movies_df.iloc[idx]
