@@ -16,6 +16,7 @@ import {
   getRecommendations,
   User
 } from '@/lib/api';
+import { fetchMoviesAction, fetchGenresAction } from '@/app/actions';
 import MovieCard from '@/components/MovieCard';
 import ChatBot from '@/components/ChatBot';
 
@@ -221,15 +222,17 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    if (step === 'home') {
-      loadHomeData();
-      if (user) syncWatchedList();
-
-      // Start hero carousel
-      startCarousel();
-    }
+    const init = async () => {
+      await loadGenres();
+      if (step === 'home') {
+        loadHomeData();
+        if (user) syncWatchedList();
+        startCarousel();
+      }
+    };
+    init();
     return () => stopCarousel();
-  }, [step, user]);
+  }, [step, user, genres.length === 0]); // Dependency on genres.length to re-trigger if empty
 
   const startCarousel = () => {
     stopCarousel();
@@ -260,7 +263,7 @@ export default function Home() {
 
   const loadGenres = async () => {
     try {
-      const data = await getGenres();
+      const data = await fetchGenresAction();
       setGenres(data);
     } catch (e) { console.error(e); }
   };
@@ -306,11 +309,13 @@ export default function Home() {
   const loadHomeData = async () => {
     setLoading(true);
     try {
-      const popular = await getMovies(0, 15, undefined, undefined, 'popularity');
+      console.log("Loading Home Data via Server Actions...");
+      const popular = await fetchMoviesAction(0, 15);
       setPopularMovies(popular);
 
       if (selectedGenreIds.length > 0 || user) {
-        const recs = await getRecommendations(user?.user_id || undefined, selectedGenreIds);
+        // Fallback recommendations if API is down
+        const recs = await getRecommendations(user?.user_id || undefined, selectedGenreIds).catch(() => []);
         setRecommendations(recs);
 
         // All genres to process
@@ -319,7 +324,7 @@ export default function Home() {
         const allRows = await Promise.all(
           allGenreIds.map(async (gid) => {
             const gName = genres.find(g => (g.genre_id === gid))?.genre_name || 'Tür';
-            const movies = await getMovies(0, 10, undefined, [gid]);
+            const movies = await fetchMoviesAction(0, 10, [gid]);
             return { id: gid, name: gName, movies };
           })
         );
@@ -333,7 +338,7 @@ export default function Home() {
         setSelectedGenreRows(selectedRows);
         setOtherGenreRows(nonSelectedRows);
       }
-    } catch (e) { console.error(e); }
+    } catch (e) { console.error("Home data failed", e); }
     finally { setLoading(false); }
   };
 
