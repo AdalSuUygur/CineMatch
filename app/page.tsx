@@ -232,7 +232,7 @@ export default function Home() {
     };
     init();
     return () => stopCarousel();
-  }, [step, user, genres.length === 0]); // Dependency on genres.length to re-trigger if empty
+  }, [step, user, genres.length === 0, selectedGenreIds.length]); // Dependency on genres.length and selectedGenreIds.length
 
   const startCarousel = () => {
     stopCarousel();
@@ -314,8 +314,14 @@ export default function Home() {
       setPopularMovies(popular);
 
       if (selectedGenreIds.length > 0 || user) {
-        // Fallback recommendations if API is down
-        const recs = await getRecommendations(user?.user_id || undefined, selectedGenreIds).catch(() => []);
+        // Try getting recommendations from Python API, fallback to Server Action boost
+        let recs: Movie[] = [];
+        try {
+          recs = await getRecommendations(user?.user_id || undefined, selectedGenreIds);
+        } catch (e) {
+          console.log("Python recommendation failed, using Server Action boost...");
+          recs = await fetchMoviesAction(0, 15, selectedGenreIds);
+        }
         setRecommendations(recs);
 
         // All genres to process

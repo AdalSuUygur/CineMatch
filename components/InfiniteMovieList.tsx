@@ -11,6 +11,7 @@ interface InfiniteMovieListProps {
   onAdd: (m: Movie) => Promise<void>;
   onRemove: (m: Movie) => Promise<void>;
   isWatched: (m: Movie) => boolean;
+  genreIds?: number[];
 }
 
 const styles = {
@@ -47,7 +48,8 @@ export default function InfiniteMovieList({
   initialMovies, 
   onAdd, 
   onRemove, 
-  isWatched 
+  isWatched,
+  genreIds
 }: InfiniteMovieListProps) {
   const [movies, setMovies] = useState<Movie[]>(initialMovies);
   const [offset, setOffset] = useState(initialMovies.length);
@@ -97,7 +99,7 @@ export default function InfiniteMovieList({
     setLoading(true);
     console.log(`[InfiniteMovieList] Loading more movies from offset ${offset}...`);
     try {
-      const newMovies = await fetchMoviesAction(offset, 24);
+      const newMovies = await fetchMoviesAction(offset, 24, genreIds);
       console.log(`[InfiniteMovieList] Received ${newMovies.length} new movies.`);
       if (newMovies.length === 0) {
         setHasMore(false);

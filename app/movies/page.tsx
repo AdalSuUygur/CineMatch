@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Header from "@/components/Header";
 import InfiniteMovieList from "@/components/InfiniteMovieList";
 import { fetchMoviesAction } from "@/app/actions";
 import { Movie, getMovieId, addInteraction, deleteInteraction } from "@/lib/api";
@@ -40,30 +39,35 @@ export default function MoviesPage() {
   const [user, setUser] = useState<any>(null);
   const [watchedMovies, setWatchedMovies] = useState<Movie[]>([]);
   const [loading, setLoading] = useState(true);
+  const [selectedGenreIds, setSelectedGenreIds] = useState<number[]>([]);
 
   useEffect(() => {
-    // Initial data fetch
-    const loadInitialData = async () => {
-      try {
-        const movies = await fetchMoviesAction(0, 24);
-        setInitialMovies(movies);
-      } catch (err) {
-        console.error("Failed to load initial movies", err);
-      } finally {
-        setLoading(false);
-      }
-    };
-
     const savedUser = localStorage.getItem('currentUser');
+    let genreIds: number[] = [];
     if (savedUser) {
       const parsedUser = JSON.parse(savedUser);
       setUser(parsedUser);
+      genreIds = parsedUser.selected_genres || [];
+      setSelectedGenreIds(genreIds);
       const savedWatched = localStorage.getItem(`watched_${parsedUser.user_id}`);
       if (savedWatched) setWatchedMovies(JSON.parse(savedWatched));
     }
 
-    loadInitialData();
+    loadInitialData(genreIds);
   }, []);
+
+  // Initial data fetch
+  const loadInitialData = async (genreIds: number[]) => {
+    try {
+      console.log("[MoviesPage] Loading initial movies with genres:", genreIds);
+      const movies = await fetchMoviesAction(0, 24, genreIds);
+      setInitialMovies(movies);
+    } catch (err) {
+      console.error("Failed to load initial movies", err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const addToWatched = async (m: Movie) => {
     if (!user) {
@@ -92,8 +96,6 @@ export default function MoviesPage() {
 
   return (
     <main style={styles.main}>
-      <Header />
-      
       <div style={styles.container}>
         <section style={styles.titleSection}>
           <h1 style={styles.title}>Tüm Filmleri Keşfet</h1>
@@ -113,6 +115,7 @@ export default function MoviesPage() {
             onAdd={addToWatched}
             onRemove={removeFromWatched}
             isWatched={isWatched}
+            genreIds={selectedGenreIds}
           />
         )}
       </div>

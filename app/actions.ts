@@ -7,30 +7,41 @@ const pool = createPool({
   connectionString: process.env.POSTGRES_URL || process.env.DATABASE_URL
 });
 
-export async function fetchMoviesAction(offset: number = 0, limit: number = 20, genreIds?: number[]) {
-  console.log(`[Server Action] fetchMoviesAction: offset=${offset}, limit=${limit}, genreIds=${genreIds}`);
+export async function fetchMoviesAction(offset: number = 0, limit: number = 24, genreIds?: number[]) {
+  const hasGenres = genreIds && genreIds.length > 0;
+  console.log(`[Server Action] fetchMoviesAction: offset=${offset}, limit=${limit}, hasGenres=${hasGenres}`);
+  
   try {
-    let query = `SELECT * FROM movies`;
-    let params: any[] = [limit, offset];
-    let paramIndex = 1;
+    let query = "";
+    let params: any[] = [];
 
-    if (genreIds && genreIds.length > 0) {
-      // Joining with movie_genres for filtering
+    if (hasGenres) {
+      // Boost movies matching selected genres but show all if preferred? 
+      // Actually, user said "türler algoritması", so let's do a JOIN for strict filtering
+      // but if they want the WHOLE list with favorites first, we use LEFT JOIN.
+      // Let's stick to strict filtering for now as it's more common for "genre selection".
       query = `
-        SELECT m.* FROM movies m
-        JOIN movie_genres mg ON m."movieId" = mg.movie_id
+        SELECT DISTINCT m.* 
+        FROM movies m
+        INNER JOIN movie_genres mg ON m."movieId" = mg.movie_id
         WHERE mg.genre_id = ANY($1)
+        ORDER BY m."popularity" DESC NULLS LAST, m."movieId" ASC
+        LIMIT $2 OFFSET $3
       `;
       params = [genreIds, limit, offset];
-      paramIndex = 2;
+    } else {
+      query = `
+        SELECT * FROM movies 
+        ORDER BY "popularity" DESC NULLS LAST, "movieId" ASC 
+        LIMIT $1 OFFSET $2
+      `;
+      params = [limit, offset];
     }
-
-    query += ` ORDER BY "popularity" DESC NULLS LAST, "movieId" ASC LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
 
     const { rows } = await pool.query<any>(query, params);
     
     // Normalize rows (DB might return lowercase or snake_case)
-    const normalizedRows = rows.map(r => ({
+    const normalizedRows = rows.map((r: any) => ({
       ...r,
       movieId: r.movieId || r.movieid || r.id,
       poster_url: r.poster_url || r.posterurl || r.image_url,
@@ -40,7 +51,7 @@ export async function fetchMoviesAction(offset: number = 0, limit: number = 20, 
       title: r.title || r.isim,
     })) as Movie[];
 
-    console.log(`[Server Action] Fetched ${normalizedRows.length} movies (offset: ${offset}).`);
+    console.log(`[Server Action] Fetched ${normalizedRows.length} movies.`);
     return normalizedRows;
   } catch (error) {
     console.error("[Server Action] Failed to fetch movies:", error);
