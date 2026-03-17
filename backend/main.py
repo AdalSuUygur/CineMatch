@@ -7,10 +7,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 
 # PostgreSQL bağlantı fonksiyonları
-from src.db_pg import init_db, close_db
+from backend.src.db_pg import init_db, close_db
 
 # Route'ları import et
-from routes import users, movies, interactions, genres, chat, recommendations
+from backend.routes import users, movies, interactions, genres, chat, recommendations
 
 
 @asynccontextmanager
@@ -20,7 +20,7 @@ async def lifespan(app: FastAPI):
     await init_db()
     
     # Öneri motorunu hazırla
-    from src.recommender import engine
+    from backend.src.recommender import engine
     import asyncio
     asyncio.create_task(engine.refresh_data())
     
