@@ -25,38 +25,13 @@ class CineMatchEngine:
     async def refresh_data(self):
         """Database'deki tüm filmleri çekip matematiksel modele hazırlar."""
         import pandas as pd
-        from sqlalchemy import func
-        
-        all_movies_list = []
-        batch_size = 5000
-        offset = 0
-        
         async with async_session_maker() as session:
-            # Önce toplam film sayısını alalım (isteğe bağlı ama takip için iyi)
-            count_result = await session.execute(select(func.count(Movie.id)))
-            total_count = count_result.scalar() or 0
-            print(f" Veritabanında toplam {total_count} film bulundu. Batch fetching başlatılıyor...")
-
-            while True:
-                stmt = select(Movie).offset(offset).limit(batch_size)
-                result = await session.execute(stmt)
-                batch = result.scalars().all()
-                
-                if not batch:
-                    break
-                    
-                batch_list = [{"movieId": m.movieId, "id": m.id, "title": m.title, "original_language": m.original_language,
-                                "vote_average": m.vote_average, "release_date": m.release_date, "popularity": m.popularity,
-                                "poster_url": m.poster_url, "llm_metadata": m.llm_metadata} for m in batch]
-                
-                all_movies_list.extend(batch_list)
-                offset += batch_size
-                print(f" {len(all_movies_list)} / {total_count} film yüklendi...")
-                
-                if len(batch) < batch_size:
-                    break
+            result = await session.execute(select(Movie))
+            movies_list = [{"movieId": m.movieId, "id": m.id, "title": m.title, "original_language": m.original_language,
+                            "vote_average": m.vote_average, "release_date": m.release_date, "popularity": m.popularity,
+                            "poster_url": m.poster_url, "llm_metadata": m.llm_metadata} for m in result.scalars().all()]
             
-        self.movies_df = pd.DataFrame(all_movies_list)
+        self.movies_df = pd.DataFrame(movies_list)
         
         if self.movies_df.empty:
             print(" HATA: Veritabanı boş dönüyor!")

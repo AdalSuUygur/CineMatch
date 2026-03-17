@@ -36,7 +36,6 @@ async def import_movies():
     
     async with async_session_maker() as session:
         count = 0
-        batch_size = 500
         for _, row in df.iterrows():
             movie = Movie(
                 movieId=int(row['movie_id']),
@@ -53,7 +52,7 @@ async def import_movies():
             )
             session.add(movie)
             count += 1
-            if count % batch_size == 0:
+            if count % 100 == 0:
                 await session.flush()
                 print(f"{count} film hazırlandı...")
         

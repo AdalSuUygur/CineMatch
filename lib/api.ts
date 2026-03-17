@@ -156,8 +156,12 @@ export async function deleteInteraction(userId: number, movieId: number): Promis
     return response.json();
 }
 
-export async function getUserInteractions(userId: number): Promise<UserInteraction[]> {
-    return fetchAPI<UserInteraction[]>(`/api/interactions/user/${userId}`);
+export async function getUserInteractions(
+    userId: number,
+    skip: number = 0,
+    limit: number = 100
+): Promise<UserInteraction[]> {
+    return fetchAPI<UserInteraction[]>(`/api/interactions/user/${userId}?skip=${skip}&limit=${limit}`);
 }
 
 export async function searchMovies(query: string): Promise<Movie[]> {
@@ -178,8 +182,11 @@ export async function getRecommendations(userId?: number, selectedGenres: number
     return response.json();
 }
 
-export async function getUsers(): Promise<User[]> {
-    return fetchAPI<User[]>('/api/users');
+export async function getUsers(
+    skip: number = 0,
+    limit: number = 100
+): Promise<User[]> {
+    return fetchAPI<User[]>(`/api/users?skip=${skip}&limit=${limit}`);
 }
 
 export async function getUser(id: number): Promise<User> {
