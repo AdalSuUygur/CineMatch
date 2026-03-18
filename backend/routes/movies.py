@@ -4,7 +4,7 @@ Film API endpoint'leri
 from fastapi import APIRouter, HTTPException, Query, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-from sqlalchemy import or_, and_, desc, func, case
+from sqlalchemy import or_, and_, desc, func
 from typing import List, Optional, Dict, Any
 
 from backend.src.db_pg import get_db
@@ -40,22 +40,17 @@ async def get_all_movies(
                 
                 if movie_ids:
                     stmt = stmt.where(Movie.movieId.in_(movie_ids))
+                    # Only decent-quality, modern films for genre rows
                     stmt = stmt.where(Movie.vote_average > 5.0)
+                    stmt = stmt.where(Movie.release_date >= '1990-01-01')
                 else:
                     return []
 
-        # Sıralama: popularity için DESC; diğer tüm sorgular için yıl ağırlıklı rastgele
-        # 2000+ -> 3x, 1985-1999 -> 1x, daha eski -> 0.3x agirlik
-        year_weight = case(
-            (Movie.release_date >= '2000-01-01', func.random() * 3.0),
-            (Movie.release_date >= '1985-01-01', func.random() * 1.0),
-            else_=func.random() * 0.3
-        ).desc()
-
+        # Sıralama: explicit sort_by=popularity için DESC, aksi hâlde rastgele
         if sort_by == "popularity":
             stmt = stmt.order_by(desc(Movie.popularity))
         else:
-            stmt = stmt.order_by(year_weight)
+            stmt = stmt.order_by(func.random())
             
         # Pagination
         stmt = stmt.offset(skip).limit(limit)
