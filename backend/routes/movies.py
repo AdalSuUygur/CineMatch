@@ -34,15 +34,7 @@ async def get_all_movies(
         if genre_ids:
             genre_id_list = [int(gid.strip()) for gid in genre_ids.split(",") if gid.strip().isdigit()]
             if genre_id_list:
-                # Build subquery or join for movie_genres
-                movie_genre_stmt = select(MovieGenre.movie_id).where(MovieGenre.genre_id.in_(genre_id_list))
-                movie_genres_result = await db.execute(movie_genre_stmt)
-                movie_ids = list(set([row[0] for row in movie_genres_result.all()]))
-                
-                if movie_ids:
-                    stmt = stmt.where(Movie.movieId.in_(movie_ids))
-                else:
-                    return []
+                stmt = stmt.join(MovieGenre, Movie.movieId == MovieGenre.movie_id).where(MovieGenre.genre_id.in_(genre_id_list)).distinct()
 
         # Sıralama
         if sort_by == "popularity":

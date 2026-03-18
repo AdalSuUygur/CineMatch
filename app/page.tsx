@@ -313,22 +313,30 @@ export default function Home() {
         const recs = await getRecommendations(user?.user_id || undefined, selectedGenreIds);
         setRecommendations(recs);
 
-        // All genres to process
-        const allGenreIds = genres.map(g => g.genre_id);
+        // Fetch selected genres first
+        const selectedGenrePromises = selectedGenreIds.map(async (gid) => {
+          const gName = genres.find(g => g.genre_id === gid)?.genre_name || 'Tür';
+          const movies = await getMovies(0, 10, undefined, [gid]);
+          return { id: gid, name: gName, movies };
+        });
 
-        const allRows = await Promise.all(
-          allGenreIds.map(async (gid) => {
-            const gName = genres.find(g => (g.genre_id === gid))?.genre_name || 'Tür';
-            const movies = await getMovies(0, 10, undefined, [gid]);
-            return { id: gid, name: gName, movies };
-          })
-        );
+        // Pick 4 random genres from the unselected ones
+        const otherGenres = genres.filter(g => !selectedGenreIds.includes(g.genre_id));
+        const shuffledOthers = [...otherGenres].sort(() => 0.5 - Math.random());
+        const randomOtherGenres = shuffledOthers.slice(0, 4);
 
-        const filteredRows = allRows.filter(r => r.movies.length > 0);
+        const otherGenrePromises = randomOtherGenres.map(async (g) => {
+          const movies = await getMovies(0, 10, undefined, [g.genre_id]);
+          return { id: g.genre_id, name: g.genre_name, movies };
+        });
 
-        // Bifurcate rows
-        const selectedRows = filteredRows.filter(r => selectedGenreIds.includes(r.id));
-        const nonSelectedRows = filteredRows.filter(r => !selectedGenreIds.includes(r.id));
+        const [selectedRowsRes, otherRowsRes] = await Promise.all([
+          Promise.all(selectedGenrePromises),
+          Promise.all(otherGenrePromises)
+        ]);
+
+        const selectedRows = selectedRowsRes.filter(r => r.movies.length > 0);
+        const nonSelectedRows = otherRowsRes.filter(r => r.movies.length > 0);
 
         setSelectedGenreRows(selectedRows);
         setOtherGenreRows(nonSelectedRows);
