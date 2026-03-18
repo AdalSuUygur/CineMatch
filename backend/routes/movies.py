@@ -40,9 +40,8 @@ async def get_all_movies(
                 
                 if movie_ids:
                     stmt = stmt.where(Movie.movieId.in_(movie_ids))
-                    # Only decent-quality, modern films for genre rows
+                    # Only show decent-quality films in genre rows
                     stmt = stmt.where(Movie.vote_average > 5.0)
-                    stmt = stmt.where(Movie.release_date >= '1990-01-01')
                 else:
                     return []
 
