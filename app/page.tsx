@@ -187,13 +187,13 @@ export default function Home() {
   // Home data
   const [popularMovies, setPopularMovies] = useState<Movie[]>([]);
   const [recommendations, setRecommendations] = useState<Movie[]>([]);
-  const [selectedGenreRows, setSelectedGenreRows] = useState<{ name: string, movies: Movie[] }[]>([]);
-  const [otherGenreRows, setOtherGenreRows] = useState<{ name: string, movies: Movie[] }[]>([]);
+  const [selectedGenreRows, setSelectedGenreRows] = useState<{ id: number, name: string, movies: Movie[] }[]>([]);
+  const [otherGenreRows, setOtherGenreRows] = useState<{ id: number, name: string, movies: Movie[] }[]>([]);;
   const [watchedMovies, setWatchedMovies] = useState<Movie[]>([]);
 
   // Hero Carousel
   const [heroIndex, setHeroIndex] = useState(0);
-  const heroInterval = useRef<NodeJS.Timeout | null>(null);
+  const heroInterval = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const [loading, setLoading] = useState(false);
   const [showGenreLimitModal, setShowGenreLimitModal] = useState(false);
@@ -305,16 +305,20 @@ export default function Home() {
 
   const loadHomeData = async () => {
     setLoading(true);
+    // Clear stale data immediately so old results don't show through
+    setPopularMovies([]);
+    setRecommendations([]);
+    setSelectedGenreRows([]);
+    setOtherGenreRows([]);
     try {
       const popular = await getMovies(0, 15, undefined, undefined, 'popularity');
       setPopularMovies(popular);
 
-      // Always fetch recommendations (guest uses selectedGenreIds, logged-in users use their profile)
+      // Always fetch recommendations
       const recs = await getRecommendations(user?.user_id || undefined, selectedGenreIds);
       setRecommendations(recs);
 
-      // Always load genre rows — need genres to be loaded first
-      // genres state may be empty if loadGenres hasn't resolved yet; re-fetch inline
+      // Always load genre metadata (MovieRow handles its own data)
       let genreList = genres;
       if (genreList.length === 0) {
         try {
@@ -325,18 +329,13 @@ export default function Home() {
       }
 
       if (genreList.length > 0) {
-        const allRows = await Promise.all(
-          genreList.map(async (g) => {
-            const movies = await getMovies(0, 10, undefined, [g.genre_id]);
-            return { id: g.genre_id, name: g.genre_name, movies };
-          })
-        );
-
-        const filteredRows = allRows.filter(r => r.movies.length > 0);
-
-        // Bifurcate: user's selected genres first, then rest
-        const selectedRows = filteredRows.filter(r => selectedGenreIds.includes(r.id));
-        const nonSelectedRows = filteredRows.filter(r => !selectedGenreIds.includes(r.id));
+        // Bifurcate: selected genres first, then rest
+        const selectedRows = genreList
+          .filter(g => selectedGenreIds.includes(g.genre_id))
+          .map(g => ({ id: g.genre_id, name: g.genre_name, movies: [] }));
+        const nonSelectedRows = genreList
+          .filter(g => !selectedGenreIds.includes(g.genre_id))
+          .map(g => ({ id: g.genre_id, name: g.genre_name, movies: [] }));
 
         setSelectedGenreRows(selectedRows);
         setOtherGenreRows(nonSelectedRows);
@@ -520,14 +519,14 @@ export default function Home() {
         <MovieRow title="Listem" movies={watchedMovies} onAdd={addToWatched} onRemove={removeFromWatched} isWatched={isWatched} />
         <MovieRow title="Popüler Filmler" movies={popularMovies} onAdd={addToWatched} onRemove={removeFromWatched} isWatched={isWatched} />
 
-        {/* Selected Genres */}
+        {/* Selected Genres - self-managed infinite scroll rows */}
         {selectedGenreRows.map(row => (
-          <MovieRow key={row.name} title={row.name} movies={row.movies} onAdd={addToWatched} onRemove={removeFromWatched} isWatched={isWatched} />
+          <MovieRow key={`sg-${row.id}`} title={row.name} genreId={row.id} onAdd={addToWatched} onRemove={removeFromWatched} isWatched={isWatched} />
         ))}
 
         {/* Other Genres for exploration */}
         {otherGenreRows.map(row => (
-          <MovieRow key={row.name} title={row.name} movies={row.movies} onAdd={addToWatched} onRemove={removeFromWatched} isWatched={isWatched} />
+          <MovieRow key={`og-${row.id}`} title={row.name} genreId={row.id} onAdd={addToWatched} onRemove={removeFromWatched} isWatched={isWatched} />
         ))}
       </div>
       {showAuthModal && (
@@ -649,11 +648,79 @@ export default function Home() {
   );
 }
 
-const MovieRow = ({ title, movies, onAdd, onRemove, isWatched }: any) => {
-  const sliderRef = useRef<HTMLDivElement>(null);
-  const [showArrows, setShowArrows] = useState(false);
+const PAGE_SIZE = 10;
 
-  if (movies.length === 0) return null;
+// MovieRow: self-contained with infinite scroll for genre rows
+const MovieRow = ({
+  title,
+  movies: initialMovies,
+  genreId,
+  onAdd,
+  onRemove,
+  isWatched,
+}: {
+  title: string;
+  movies?: Movie[];
+  genreId?: number;
+  onAdd: (m: Movie) => void;
+  onRemove: (m: Movie) => void;
+  isWatched: (m: Movie) => boolean;
+}) => {
+  const sliderRef = useRef<HTMLDivElement>(null);
+  const sentinelRef = useRef<HTMLDivElement>(null);
+  const [showArrows, setShowArrows] = useState(false);
+  const [movies, setMovies] = useState<Movie[]>(initialMovies || []);
+  const [skip, setSkip] = useState(initialMovies?.length || 0);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
+
+  // Initial load for genre rows
+  useEffect(() => {
+    if (genreId !== undefined && movies.length === 0) {
+      setIsLoadingMore(true);
+      getMovies(0, PAGE_SIZE, undefined, [genreId])
+        .then(data => {
+          setMovies(data);
+          setSkip(data.length);
+          setHasMore(data.length === PAGE_SIZE);
+        })
+        .catch(console.error)
+        .finally(() => setIsLoadingMore(false));
+    }
+  }, [genreId]);
+
+  // Infinite scroll sentinel
+  useEffect(() => {
+    if (!genreId || !hasMore) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && !isLoadingMore) {
+          setIsLoadingMore(true);
+          getMovies(skip, PAGE_SIZE, undefined, [genreId])
+            .then(data => {
+              if (data.length === 0) {
+                setHasMore(false);
+              } else {
+                setMovies(prev => {
+                  const existingIds = new Set(prev.map(m => getMovieId(m)));
+                  const newMovies = data.filter(m => !existingIds.has(getMovieId(m)));
+                  return [...prev, ...newMovies];
+                });
+                setSkip(prev => prev + data.length);
+                setHasMore(data.length === PAGE_SIZE);
+              }
+            })
+            .catch(console.error)
+            .finally(() => setIsLoadingMore(false));
+        }
+      },
+      { threshold: 0.1 }
+    );
+    if (sentinelRef.current) observer.observe(sentinelRef.current);
+    return () => observer.disconnect();
+  }, [genreId, skip, isLoadingMore, hasMore]);
+
+  if (!isLoadingMore && movies.length === 0) return null;
 
   const scroll = (direction: 'left' | 'right') => {
     if (sliderRef.current) {
@@ -661,7 +728,6 @@ const MovieRow = ({ title, movies, onAdd, onRemove, isWatched }: any) => {
       const scrollTo = direction === 'left'
         ? scrollLeft - clientWidth * 0.8
         : scrollLeft + clientWidth * 0.8;
-
       sliderRef.current.scrollTo({ left: scrollTo, behavior: 'smooth' });
     }
   };
@@ -717,7 +783,33 @@ const MovieRow = ({ title, movies, onAdd, onRemove, isWatched }: any) => {
             />
           </div>
         ))}
+        {/* Infinite scroll sentinel + loading spinner */}
+        {genreId !== undefined && (
+          <div
+            ref={sentinelRef}
+            style={{
+              flexShrink: 0,
+              width: isLoadingMore ? '120px' : '1px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              transition: 'width 0.3s',
+            }}
+          >
+            {isLoadingMore && (
+              <div style={{
+                width: '48px',
+                height: '48px',
+                borderRadius: '50%',
+                border: '3px solid rgba(229, 9, 20, 0.2)',
+                borderTop: '3px solid #e50914',
+                animation: 'spin 0.8s linear infinite',
+              }} />
+            )}
+          </div>
+        )}
       </div>
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </div>
   );
 };
