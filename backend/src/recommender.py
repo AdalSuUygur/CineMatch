@@ -27,10 +27,9 @@ class CineMatchEngine:
             return [g.genre_name for g in genres]
 
     async def recommend_for_guest(self, selected_genre_ids, skip: int = 0, limit: int = 20):
-        """GUEST: Seçili türlerde yüksek puanlı ve popüler filmler döner."""
+        """GUEST: Seçili türlerde yüksek puanlı ve rastgele filmler döner."""
         async with async_session_maker() as session:
             if selected_genre_ids:
-                # Get movies in selected genres
                 genre_movie_ids_result = await session.execute(
                     select(MovieGenre.movie_id)
                     .where(MovieGenre.genre_id.in_(selected_genre_ids))
@@ -43,14 +42,14 @@ class CineMatchEngine:
                         select(Movie)
                         .where(Movie.movieId.in_(genre_movie_ids))
                         .where(Movie.vote_average > 6.0)
-                        .order_by(desc(Movie.popularity))
+                        .order_by(func.random())
                         .offset(skip)
                         .limit(limit)
                     )
                 else:
-                    stmt = select(Movie).order_by(desc(Movie.popularity)).offset(skip).limit(limit)
+                    stmt = select(Movie).where(Movie.vote_average > 5.0).order_by(func.random()).offset(skip).limit(limit)
             else:
-                stmt = select(Movie).order_by(desc(Movie.popularity)).offset(skip).limit(limit)
+                stmt = select(Movie).where(Movie.vote_average > 5.0).order_by(func.random()).offset(skip).limit(limit)
 
             result = await session.execute(stmt)
             movies = result.scalars().all()
@@ -109,11 +108,11 @@ class CineMatchEngine:
             candidate_ids = [mid for mid in candidate_ids if mid not in all_watched_ids]
 
             if not candidate_ids:
-                # Fallback: just popular movies
                 stmt = (
                     select(Movie)
                     .where(Movie.movieId.notin_(all_watched_ids) if all_watched_ids else True)
-                    .order_by(desc(Movie.popularity))
+                    .where(Movie.vote_average > 5.0)
+                    .order_by(func.random())
                     .offset(skip)
                     .limit(limit)
                 )
@@ -122,7 +121,7 @@ class CineMatchEngine:
                     select(Movie)
                     .where(Movie.movieId.in_(candidate_ids))
                     .where(Movie.vote_average > 5.5)
-                    .order_by(desc(Movie.popularity))
+                    .order_by(func.random())
                     .offset(skip)
                     .limit(limit)
                 )
