@@ -91,9 +91,7 @@ const styles = {
     display: 'flex',
     alignItems: 'center',
     padding: '0 4%',
-    backgroundSize: 'cover',
-    backgroundPosition: 'center top',
-    transition: 'background-image 0.8s ease-in-out',
+    overflow: 'hidden',
   },
   heroOverlay: {
     position: 'absolute' as const,
@@ -465,14 +463,41 @@ export default function Home() {
 
   const currentHero = popularMovies[heroIndex] || popularMovies[0];
   const heroImg = currentHero?.poster_url || "https://images.unsplash.com/photo-1626814026160-2237a95fc5a0?q=80&w=2070&auto=format&fit=crop";
+  const heroContentKey = `hero-content-${heroIndex}`;
 
   return (
     <main style={styles.main}>
-      <style>{`.no-scrollbar::-webkit-scrollbar { display: none; }`}</style>
+      <style>{`
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        @keyframes heroBgFadeIn {
+          from { opacity: 0; }
+          to   { opacity: 1; }
+        }
+        @keyframes heroContentSlideIn {
+          from { opacity: 0; transform: translateY(20px); }
+          to   { opacity: 1; transform: translateY(0); }
+        }
+      `}</style>
 
-      <section style={{ ...styles.hero, backgroundImage: `url(${heroImg})` }}>
+      <section style={styles.hero}>
+        {/* Crossfade background layers */}
+        <div
+          key={heroImg}
+          style={{
+            position: 'absolute',
+            inset: 0,
+            backgroundImage: `url(${heroImg})`,
+            backgroundSize: 'cover',
+            backgroundPosition: 'center top',
+            animation: 'heroBgFadeIn 1s ease-in-out forwards',
+            zIndex: 0,
+          }}
+        />
         <div style={styles.heroOverlay} />
-        <div style={styles.heroContent}>
+        <div
+          key={heroContentKey}
+          style={{ ...styles.heroContent, animation: 'heroContentSlideIn 0.8s ease-out forwards' }}
+        >
           <h1 style={styles.heroTitle}>{currentHero?.title}</h1>
           <p style={styles.heroDesc}>{currentHero?.llm_metadata?.split(',').slice(0, 2).join(', ')}</p>
           <div style={{ display: 'flex', gap: '1.5rem' }}>
